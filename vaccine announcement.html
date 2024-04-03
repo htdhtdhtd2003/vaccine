@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Play Audio from GitHub</title>
+</head>
+<body>
+
+<audio id="audioPlayer" controls>
+  <source id="audioSource" src="" type="audio/mpeg">
+  Your browser does not support the audio element.
+</audio>
+
+<button onclick="playAudioFromGitHub()">Play Audio</button>
+
+<script>
+  function playAudioFromGitHub() {
+    var audioPlayer = document.getElementById('audioPlayer');
+    var audioSource = document.getElementById('audioSource');
+    var githubUrl = 'https://raw.githubusercontent.com/username/repository/branch/path/to/your/audio/file.mp3';
+    
+    // Set the source of the audio element
+    audioSource.src = githubUrl;
+    
+    // Load the audio file
+    audioPlayer.load();
+    
+    // Play the audio
+    audioPlayer.play();
+  }
+</script>
+
+</body>
+</html>
