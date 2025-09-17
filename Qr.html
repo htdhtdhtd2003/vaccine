@@ -3,46 +3,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>QR Code Camera Reader</title>
+  <title>QR Code Reader + Recreate QR</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    body { font-family: Arial; text-align: center; padding: 20px; }
     #reader { width: 100%; max-width: 400px; margin: auto; }
-    #result { margin-top: 20px; font-size: 18px; font-weight: bold; color: green; }
+    #controls { margin-top: 10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    button, input[type=range] { margin-top: 10px; padding: 10px 14px; border-radius: 6px; border: none; font-size: 16px; cursor: pointer; }
+    button { background: #007bff; color: white; }
+    button:hover { background: #0056b3; }
+    input[type=range] { width: 80%; max-width: 300px; }
+    #result { margin-top: 15px; font-size: 18px; font-weight: bold; color: green; }
+    #recreatedQR { margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h2>QR Code Camera Reader</h2>
+  <h2>QR Code Reader + Recreate</h2>
   <div id="reader"></div>
+
+  <div id="controls">
+    <button id="torchBtn" style="display:none;">Toggle Torch</button>
+    <input id="zoomSlider" type="range" min="1" max="1" step="0.1" value="1" style="display:none;">
+  </div>
+
   <div id="result">Scanning...</div>
+  <canvas id="recreatedQR"></canvas>
 
   <script>
-    function onScanSuccess(decodedText, decodedResult) {
+    let html5QrCode;
+    let videoTrack = null;
+    let torchOn = false;
+    let zoomCapabilities = null;
+
+    function onScanSuccess(decodedText) {
       document.getElementById("result").innerText = "Scanned: " + decodedText;
-      // You could also redirect, copy to clipboard, etc.
+
+      // Recreate QR code
+      QRCode.toCanvas(document.getElementById("recreatedQR"), decodedText, { width: 200 }, err => {
+        if (err) console.error(err);
+      });
     }
 
-    function onScanError(errorMessage) {
-      // Called for scan errors; can ignore or log
-    }
+    async function startScanner() {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || !devices.length) {
+          document.getElementById("result").innerText = "No camera found";
+          return;
+        }
 
-    // Always use rear camera if available
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
         const backCamera = devices.find(d => d.label.toLowerCase().includes("back")) || devices[0];
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start(
+        html5QrCode = new Html5Qrcode("reader");
+
+        await html5QrCode.start(
           { deviceId: { exact: backCamera.id } },
-          { fps: 10, qrbox: 250 },  // fps = scans per second, qrbox = size of scanning area
-          onScanSuccess,
-          onScanError
+          { fps: 10, qrbox: 250 },
+          onScanSuccess
         );
-      } else {
-        document.getElementById("result").innerText = "No camera found";
+
+        videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
+        if (!videoTrack) return;
+
+        const capabilities = videoTrack.getCapabilities();
+
+        // Autofocus
+        if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+          await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        }
+
+        // Torch
+        const torchBtn = document.getElementById("torchBtn");
+        if (capabilities.torch) {
+          torchBtn.style.display = "inline-block";
+          torchBtn.addEventListener("click", () => {
+            torchOn = !torchOn;
+            videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
+              .catch(err => console.warn("Torch not supported", err));
+          });
+        }
+
+        // Zoom
+        const zoomSlider = document.getElementById("zoomSlider");
+        if (capabilities.zoom) {
+          zoomSlider.min = capabilities.min;
+          zoomSlider.max = capabilities.max;
+          zoomSlider.step = capabilities.step || 0.1;
+          zoomSlider.value = (capabilities.min + capabilities.max) / 2;
+          zoomSlider.style.display = "inline-block";
+          await videoTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+
+          zoomSlider.addEventListener("input", e => {
+            const val = e.target.value;
+            videoTrack.applyConstraints({ advanced: [{ zoom: val }] })
+              .catch(err => console.warn("Zoom not applied", err));
+          });
+        }
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById("result").innerText = "Camera access error: " + err;
       }
-    }).catch(err => {
-      document.getElementById("result").innerText = "Camera access error: " + err;
-    });
+    }
+
+    startScanner();
   </script>
 </body>
 </html>
