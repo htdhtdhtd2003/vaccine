@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rear Camera 2D Barcode Scanner</title>
+<title>Enhanced 2D Barcode Scanner</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
@@ -11,25 +11,37 @@ body { font-family: Arial; text-align: center; padding: 20px; }
 #reader { width: 100%; max-width: 400px; margin: auto; border:1px solid #ccc; border-radius:8px; }
 #result { margin-top:15px; font-weight:bold; color:green; }
 canvas { margin-top:15px; width:200px; height:200px; border:1px solid #ccc; }
-button { margin-top:10px; padding:10px 14px; font-size:16px; border:none; border-radius:6px; cursor:pointer; background:#007bff; color:white; }
+button, input { margin-top:10px; padding:10px 14px; font-size:16px; border:none; border-radius:6px; cursor:pointer; }
+button { background:#007bff; color:white; }
 button:hover { background:#0056b3; }
+input[type=range] { width: 200px; }
 </style>
 </head>
 <body>
 
-<h2>Rear Camera 2D Barcode Scanner</h2>
+<h2>Enhanced Rear Camera 2D Barcode Scanner</h2>
 <div id="reader"></div>
 <div id="result">Scanning...</div>
 <canvas id="recreatedQR"></canvas>
+<br>
 <button id="stopBtn">Stop Scanner</button>
+<button id="torchBtn">Toggle Torch</button>
+<br>
+<label for="zoomSlider">Zoom:</label>
+<input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1">
 
 <script>
-const html5QrCode = new Html5Qrcode("reader");
+let html5QrCode = new Html5Qrcode("reader");
 const resultDiv = document.getElementById("result");
 const recreatedCanvas = document.getElementById("recreatedQR");
 const stopBtn = document.getElementById("stopBtn");
+const torchBtn = document.getElementById("torchBtn");
+const zoomSlider = document.getElementById("zoomSlider");
 
-// Configuration: support multiple 2D barcode formats
+let currentStream;
+let torchOn = false;
+
+// Supported 2D barcodes
 const config = {
     fps: 10,
     qrbox: 250,
@@ -42,35 +54,71 @@ const config = {
     ]
 };
 
-// Get rear camera only
+// Start scanner with rear camera only
 Html5Qrcode.getCameras().then(cameras => {
     if(cameras && cameras.length){
-        // Try to select a rear camera (look for 'back' or 'environment')
         let rearCamera = cameras.find(cam => /back|environment/i.test(cam.label)) || cameras[0];
         html5QrCode.start(
             { deviceId: { exact: rearCamera.id } },
             config,
             (decodedText, decodedResult) => {
                 resultDiv.innerText = "Scanned: " + decodedText;
-                QRCode.toCanvas(recreatedCanvas, decodedText, { width: 200 }, err => {
-                    if(err) console.error(err);
-                });
+                QRCode.toCanvas(recreatedCanvas, decodedText, { width: 200 }, err => { if(err) console.error(err); });
             },
             (errorMessage) => {
-                // Ignore scan errors
+                // scanning error ignored
             }
-        );
+        ).then(stream => {
+            currentStream = stream;
+            const track = stream.getVideoTracks()[0];
+            const capabilities = track.getCapabilities();
+
+            // Set continuous autofocus if supported
+            if(capabilities.focusMode && capabilities.focusMode.includes('continuous')){
+                track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+            }
+
+            // Enable zoom control if supported
+            if(capabilities.zoom){
+                zoomSlider.min = capabilities.zoom.min;
+                zoomSlider.max = capabilities.zoom.max;
+                zoomSlider.step = capabilities.zoom.step || 0.1;
+                zoomSlider.value = capabilities.zoom.min;
+            }
+
+            // Torch support
+            if(!capabilities.torch){
+                torchBtn.style.display = 'none';
+            }
+        }).catch(err => console.error(err));
     }
 }).catch(err => {
     console.error(err);
     resultDiv.innerText = "Camera not found or access denied";
 });
 
-// Stop scanner button
+// Stop scanner
 stopBtn.addEventListener("click", () => {
     html5QrCode.stop().then(() => {
         resultDiv.innerText = "Scanner stopped";
     }).catch(err => console.error(err));
+});
+
+// Toggle torch
+torchBtn.addEventListener("click", () => {
+    if(currentStream){
+        const track = currentStream.getVideoTracks()[0];
+        torchOn = !torchOn;
+        track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    }
+});
+
+// Zoom control
+zoomSlider.addEventListener("input", () => {
+    if(currentStream){
+        const track = currentStream.getVideoTracks()[0];
+        track.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+    }
 });
 </script>
 
