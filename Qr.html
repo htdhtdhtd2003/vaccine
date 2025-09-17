@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Reader (Switchable Cameras)</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    #reader {
+      width: 300px;
+      margin: auto;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      color: green;
+    }
+    #qrcode {
+      margin-top: 20px;
+    }
+    #switchBtn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    #switchBtn:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>QR Code Scanner</h1>
+  
+  <!-- QR Scanner -->
+  <div id="reader"></div>
+  <button id="switchBtn">Switch Camera</button>
+  <div id="result">Scanning...</div>
+  
+  <!-- QR Generator -->
+  <div id="qrcode"></div>
+
+  <script>
+    let html5QrCode;
+    let cameras = [];
+    let currentCameraIndex = 0;
+
+    function onScanSuccess(decodedText, decodedResult) {
+      document.getElementById("result").innerText = "Scanned: " + decodedText;
+
+      // Generate QR from scanned text
+      document.getElementById("qrcode").innerHTML = "";
+      QRCode.toCanvas(document.getElementById("qrcode"), decodedText, { width: 200 }, function (error) {
+        if (error) console.error(error);
+      });
+    }
+
+    function startCamera(cameraId) {
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          html5QrCode.start(
+            { deviceId: { exact: cameraId } },
+            { fps: 10, qrbox: 250 },
+            onScanSuccess
+          ).catch(err => console.error("Camera start failed", err));
+        });
+      } else {
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+          { deviceId: { exact: cameraId } },
+          { fps: 10, qrbox: 250 },
+          onScanSuccess
+        ).catch(err => console.error("Camera start failed", err));
+      }
+    }
+
+    // Initialize cameras
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        cameras = devices;
+
+        // Try to start with front camera first
+        let frontCamera = devices.find(device => device.label.toLowerCase().includes("front"));
+        if (frontCamera) {
+          currentCameraIndex = devices.indexOf(frontCamera);
+        } else {
+          currentCameraIndex = 0; // fallback to first
+        }
+
+        startCamera(cameras[currentCameraIndex].id);
+      }
+    }).catch(err => console.error("Camera access error", err));
+
+    // Switch camera button
+    document.getElementById("switchBtn").addEventListener("click", () => {
+      if (cameras.length > 1) {
+        currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
+        startCamera(cameras[currentCameraIndex].id);
+      }
+    });
+  </script>
+</body>
+</html>
