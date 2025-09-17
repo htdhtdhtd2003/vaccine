@@ -3,72 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR Scanner Chooser & Recreator</title>
+<title>QR Generator</title>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
 body { font-family: Arial; text-align: center; padding: 20px; }
-button, input, a { padding: 10px 14px; font-size: 16px; margin-top: 10px; border-radius:6px; border:none; cursor:pointer; }
-button { background:#007bff; color:white; }
-button:hover, a:hover { background:#0056b3; color:white; text-decoration:none; }
-input { width: 70%; max-width: 300px; }
 canvas { margin-top: 15px; width:200px; height:200px; border:1px solid #ccc; }
-#status { margin-top: 10px; font-weight:bold; color: green; }
 </style>
 </head>
 <body>
 
-<h2>Choose QR Scanner App & Recreate</h2>
-
-<!-- Generic Android intent chooser -->
-<a href="intent://scan/#Intent;scheme=zxing;end" id="chooserBtn">
-  Open QR Scanner (Choose App)
-</a>
-
-<h3>Paste QR Code Text Here:</h3>
-<input type="text" id="qrText" placeholder="Paste scanned QR code">
-<br>
-<button id="recreateBtn">Recreate QR Code</button>
-<button id="downloadBtn">Download QR</button>
+<h2>QR Code Generator</h2>
 <canvas id="recreatedQR"></canvas>
-<div id="status">Waiting for scan...</div>
 
 <script>
-const qrText = document.getElementById('qrText');
-const recreatedCanvas = document.getElementById('recreatedQR');
-const recreateBtn = document.getElementById('recreateBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const statusDiv = document.getElementById('status');
+// Function to get URL parameter
+function getQueryParam(name) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(name);
+}
 
-// Recreate QR code
-recreateBtn.addEventListener('click', () => {
-  const text = qrText.value.trim();
-  if(!text) {
-    statusDiv.innerText = "Please paste QR code text first.";
-    return;
-  }
-  QRCode.toCanvas(recreatedCanvas, text, { width: 200 }, err => {
-    if(err) {
-      console.error(err);
-      statusDiv.innerText = "Error recreating QR code.";
-    } else {
-      statusDiv.innerText = "QR code recreated successfully!";
-    }
+// Get 'data' parameter
+const scannedText = getQueryParam('data');
+if(scannedText) {
+  QRCode.toCanvas(document.getElementById('recreatedQR'), scannedText, { width: 200 }, err => {
+    if(err) console.error(err);
   });
-});
-
-// Download QR code as PNG
-downloadBtn.addEventListener('click', () => {
-  const text = qrText.value.trim();
-  if(!text) {
-    statusDiv.innerText = "No QR code to download.";
-    return;
-  }
-  const link = document.createElement('a');
-  link.download = 'qr-code.png';
-  link.href = recreatedCanvas.toDataURL("image/png");
-  link.click();
-  statusDiv.innerText = "QR code downloaded!";
-});
+} else {
+  document.getElementById('recreatedQR').innerText = "No data received";
+}
 </script>
 
 </body>
