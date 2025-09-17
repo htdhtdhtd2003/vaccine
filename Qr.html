@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Live QR Scanner with Zoom</title>
+<title>Live QR Scanner – Samsung Optimized</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
@@ -19,7 +19,7 @@ canvas { margin-top: 15px; width:200px; height:200px; }
 </head>
 <body>
 
-<h2>Live QR Scanner with Zoom</h2>
+<h2>Live QR Scanner – Samsung Optimized</h2>
 <div id="reader"></div>
 
 <div id="controls">
@@ -36,15 +36,11 @@ let videoTrack = null;
 let torchOn = false;
 
 // QR decode callback
-function onScanSuccess(decodedText, decodedResult) {
+function onScanSuccess(decodedText) {
   document.getElementById("result").innerText = "Scanned: " + decodedText;
   QRCode.toCanvas(document.getElementById("recreatedQR"), decodedText, { width: 200 }, err=>{
     if(err) console.error(err);
   });
-}
-
-function onScanError(errorMessage) {
-  // optional logging
 }
 
 async function startLiveScanner() {
@@ -55,14 +51,14 @@ async function startLiveScanner() {
       return;
     }
 
+    // Prefer rear camera
     const backCamera = devices.find(d => d.label.toLowerCase().includes("back")) || devices[0];
 
     html5QrCode = new Html5Qrcode("reader");
     await html5QrCode.start(
       { deviceId: { exact: backCamera.id } },
       { fps: 10, qrbox: 250 },
-      onScanSuccess,
-      onScanError
+      onScanSuccess
     );
 
     videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
@@ -72,6 +68,7 @@ async function startLiveScanner() {
     // Continuous autofocus
     if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
       await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+      console.log("Autofocus enabled");
     }
 
     // Torch support
@@ -87,17 +84,21 @@ async function startLiveScanner() {
     // Zoom support
     const zoomSlider = document.getElementById("zoomSlider");
     if (capabilities.zoom) {
-      zoomSlider.min = capabilities.min;
-      zoomSlider.max = capabilities.max;
-      zoomSlider.step = capabilities.step || 0.1;
-      zoomSlider.value = (capabilities.min + capabilities.max)/2;
+      const maxZoom = Math.min(capabilities.zoom.max, 4); // limit to 4x for quality
+      const minZoom = capabilities.zoom.min;
+      const step = capabilities.zoom.step || 0.1;
+
+      zoomSlider.min = minZoom;
+      zoomSlider.max = maxZoom;
+      zoomSlider.step = step;
+      zoomSlider.value = (minZoom + maxZoom) / 2; // safe mid-range default
       zoomSlider.style.display = "inline-block";
 
       // Apply initial zoom
       await videoTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
 
       zoomSlider.addEventListener("input", async (e) => {
-        const val = e.target.value;
+        const val = parseFloat(e.target.value);
         try {
           await videoTrack.applyConstraints({ advanced: [{ zoom: val }] });
         } catch(err) {
