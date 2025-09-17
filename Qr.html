@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,16 +17,15 @@ canvas { margin-top: 15px; width:200px; height:200px; border:1px solid #ccc; }
 <canvas id="recreatedQR"></canvas>
 
 <script>
-// Function to get URL parameter
+// Get URL parameter
 function getQueryParam(name) {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get(name);
 }
 
-// Get 'data' parameter
 const scannedText = getQueryParam('data');
 if(scannedText) {
-  QRCode.toCanvas(document.getElementById('recreatedQR'), scannedText, { width: 200 }, err => {
+  QRCode.toCanvas(document.getElementById('recreatedQR'), scannedText, { width: 200 }, err=>{
     if(err) console.error(err);
   });
 } else {
