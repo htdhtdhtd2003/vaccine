@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Reader (Zoom Control)</title>
+  <title>QR Code Scanner (Rear Camera Only)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
@@ -13,7 +13,8 @@
       padding: 20px;
     }
     #reader {
-      width: 300px;
+      width: 100%;
+      max-width: 400px;
       margin: auto;
     }
     #result {
@@ -25,32 +26,30 @@
     #qrcode {
       margin-top: 20px;
     }
-    #switchBtn, #zoomSlider {
-      margin-top: 15px;
+    button {
+      margin-top: 10px;
       padding: 10px 20px;
       font-size: 16px;
-    }
-    #switchBtn {
       border: none;
       border-radius: 6px;
       background: #007bff;
       color: white;
       cursor: pointer;
     }
-    #switchBtn:hover {
+    button:hover {
       background: #0056b3;
     }
     #zoomControl {
       margin-top: 15px;
-      display: none; /* hidden until zoom is supported */
+      display: none;
     }
   </style>
 </head>
 <body>
-  <h1>QR Code Scanner (Zoom Control)</h1>
+  <h1>QR Code Scanner (Rear Camera)</h1>
   
   <div id="reader"></div>
-  <button id="switchBtn">Switch Camera</button>
+  <button id="torchBtn" style="display:none;">Toggle Torch</button>
 
   <div id="zoomControl">
     <label for="zoomSlider">Zoom:</label>
@@ -62,10 +61,9 @@
 
   <script>
     let html5QrCode;
-    let cameras = [];
-    let currentCameraIndex = 0;
     let videoTrack = null;
     let zoomCapabilities = null;
+    let torchOn = false;
 
     function onScanSuccess(decodedText, decodedResult) {
       document.getElementById("result").innerText = "Scanned: " + decodedText;
@@ -85,52 +83,49 @@
 
       html5QrCode.start(
         { deviceId: { exact: cameraId } },
-        { fps: 10, qrbox: 250 },
+        { fps: 15, qrbox: 300, aspectRatio: 1.7778 },
         onScanSuccess
       ).then(() => {
         videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
         if (videoTrack) {
-          zoomCapabilities = videoTrack.getCapabilities();
-          if (zoomCapabilities.zoom) {
+          let capabilities = videoTrack.getCapabilities();
+
+          // Setup Zoom
+          if (capabilities.zoom) {
             let slider = document.getElementById("zoomSlider");
-            slider.min = zoomCapabilities.min;
-            slider.max = zoomCapabilities.max;
-            slider.step = zoomCapabilities.step || 0.1;
-            slider.value = (zoomCapabilities.min + zoomCapabilities.max) / 2;
+            slider.min = capabilities.min;
+            slider.max = capabilities.max;
+            slider.step = capabilities.step || 0.1;
+            slider.value = (capabilities.min + capabilities.max) / 2;
 
             document.getElementById("zoomControl").style.display = "block";
-
-            // Apply initial zoom
             videoTrack.applyConstraints({ advanced: [{ zoom: slider.value }] });
-          } else {
-            document.getElementById("zoomControl").style.display = "none";
+            zoomCapabilities = capabilities;
+          }
+
+          // Setup Torch
+          if (capabilities.torch) {
+            document.getElementById("torchBtn").style.display = "inline-block";
           }
         }
       }).catch(err => console.error("Camera start failed", err));
     }
 
-    // Initialize cameras
+    // Pick rear camera only
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
-        cameras = devices;
-
-        // Prefer front camera
-        let frontCamera = devices.find(device => device.label.toLowerCase().includes("front"));
-        if (frontCamera) {
-          currentCameraIndex = devices.indexOf(frontCamera);
-        } else {
-          currentCameraIndex = 0; // fallback
-        }
-
-        startCamera(cameras[currentCameraIndex].id);
+        // Look for rear/back-facing camera
+        let backCamera = devices.find(device => device.label.toLowerCase().includes("back")) || devices[0];
+        startCamera(backCamera.id);
       }
     }).catch(err => console.error("Camera access error", err));
 
-    // Switch camera button
-    document.getElementById("switchBtn").addEventListener("click", () => {
-      if (cameras.length > 1) {
-        currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
-        startCamera(cameras[currentCameraIndex].id);
+    // Torch toggle
+    document.getElementById("torchBtn").addEventListener("click", () => {
+      if (videoTrack) {
+        torchOn = !torchOn;
+        videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
+          .catch(err => console.warn("Torch not supported:", err));
       }
     });
 
