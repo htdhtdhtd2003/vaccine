@@ -3,78 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Capture → Read QR → Recreate QR</title>
+  <title>QR Code Camera Reader</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-    video, img { width: 100%; max-width: 400px; border-radius: 8px; margin-top: 10px; }
-    button { margin-top: 10px; padding: 10px 16px; border: none; border-radius: 6px;
-             background: #007bff; color: white; font-size: 16px; cursor: pointer; }
-    button:hover { background: #0056b3; }
+    #reader { width: 100%; max-width: 400px; margin: auto; }
     #result { margin-top: 20px; font-size: 18px; font-weight: bold; color: green; }
-    #qrcode { margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h2>Take Picture → Read QR → Recreate QR</h2>
-
-  <video id="video" autoplay playsinline></video><br>
-  <button id="captureBtn">📸 Take Picture</button>
-  <img id="photo" style="display:none;" />
-
-  <div id="result">No QR detected yet.</div>
-  <div id="qrcode"></div>
+  <h2>QR Code Camera Reader</h2>
+  <div id="reader"></div>
+  <div id="result">Scanning...</div>
 
   <script>
-    const video = document.getElementById('video');
-    const photo = document.getElementById('photo');
-    const resultDiv = document.getElementById('result');
-    const qrcodeDiv = document.getElementById('qrcode');
-
-    // Start rear camera
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: "environment" } }
-        });
-        video.srcObject = stream;
-      } catch (err) {
-        console.error("Camera error:", err);
-        resultDiv.textContent = "Error: Cannot access rear camera.";
-      }
+    function onScanSuccess(decodedText, decodedResult) {
+      document.getElementById("result").innerText = "Scanned: " + decodedText;
+      // You could also redirect, copy to clipboard, etc.
     }
-    startCamera();
 
-    document.getElementById('captureBtn').addEventListener('click', async () => {
-      // Capture current video frame
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const dataUrl = canvas.toDataURL("image/png");
-      photo.src = dataUrl;
-      photo.style.display = "block";
+    function onScanError(errorMessage) {
+      // Called for scan errors; can ignore or log
+    }
 
-      // Convert dataURL to File for html5-qrcode
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], "capture.png", { type: "image/png" });
-
-      const html5QrCode = new Html5Qrcode(/* elementId not needed for file scan */ "reader-temp");
-      try {
-        const qrCodeResult = await html5QrCode.scanFileV2(file, true);
-        resultDiv.textContent = "Scanned: " + qrCodeResult.decodedText;
-
-        // Recreate QR
-        qrcodeDiv.innerHTML = "";
-        QRCode.toCanvas(qrcodeDiv, qrCodeResult.decodedText, { width: 200 }, err => {
-          if (err) console.error(err);
-        });
-      } catch (err) {
-        console.error("QR decode error:", err);
-        resultDiv.textContent = "No QR code found in image.";
+    // Always use rear camera if available
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        const backCamera = devices.find(d => d.label.toLowerCase().includes("back")) || devices[0];
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+          { deviceId: { exact: backCamera.id } },
+          { fps: 10, qrbox: 250 },  // fps = scans per second, qrbox = size of scanning area
+          onScanSuccess,
+          onScanError
+        );
+      } else {
+        document.getElementById("result").innerText = "No camera found";
       }
+    }).catch(err => {
+      document.getElementById("result").innerText = "Camera access error: " + err;
     });
   </script>
 </body>
