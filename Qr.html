@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Reader (Auto Zoom)</title>
+  <title>QR Code Reader (Zoom Control)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
@@ -25,10 +25,12 @@
     #qrcode {
       margin-top: 20px;
     }
-    #switchBtn {
+    #switchBtn, #zoomSlider {
       margin-top: 15px;
       padding: 10px 20px;
       font-size: 16px;
+    }
+    #switchBtn {
       border: none;
       border-radius: 6px;
       background: #007bff;
@@ -38,13 +40,23 @@
     #switchBtn:hover {
       background: #0056b3;
     }
+    #zoomControl {
+      margin-top: 15px;
+      display: none; /* hidden until zoom is supported */
+    }
   </style>
 </head>
 <body>
-  <h1>QR Code Scanner (Auto Zoom)</h1>
+  <h1>QR Code Scanner (Zoom Control)</h1>
   
   <div id="reader"></div>
   <button id="switchBtn">Switch Camera</button>
+
+  <div id="zoomControl">
+    <label for="zoomSlider">Zoom:</label>
+    <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1">
+  </div>
+
   <div id="result">Scanning...</div>
   <div id="qrcode"></div>
 
@@ -52,6 +64,8 @@
     let html5QrCode;
     let cameras = [];
     let currentCameraIndex = 0;
+    let videoTrack = null;
+    let zoomCapabilities = null;
 
     function onScanSuccess(decodedText, decodedResult) {
       document.getElementById("result").innerText = "Scanned: " + decodedText;
@@ -74,19 +88,22 @@
         { fps: 10, qrbox: 250 },
         onScanSuccess
       ).then(() => {
-        // Access the raw video track
-        let videoTrack = html5QrCode.getState() === Html5QrcodeScannerState.SCANNING 
-          ? document.querySelector("video")?.srcObject?.getVideoTracks()[0] 
-          : null;
-
+        videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
         if (videoTrack) {
-          let capabilities = videoTrack.getCapabilities();
-          if (capabilities.zoom) {
-            // Pick a zoom level (e.g. halfway between min & max)
-            let targetZoom = (capabilities.max + capabilities.min) / 2;
-            videoTrack.applyConstraints({ advanced: [{ zoom: targetZoom }] })
-              .then(() => console.log("Zoom set to", targetZoom))
-              .catch(err => console.warn("Zoom not applied", err));
+          zoomCapabilities = videoTrack.getCapabilities();
+          if (zoomCapabilities.zoom) {
+            let slider = document.getElementById("zoomSlider");
+            slider.min = zoomCapabilities.min;
+            slider.max = zoomCapabilities.max;
+            slider.step = zoomCapabilities.step || 0.1;
+            slider.value = (zoomCapabilities.min + zoomCapabilities.max) / 2;
+
+            document.getElementById("zoomControl").style.display = "block";
+
+            // Apply initial zoom
+            videoTrack.applyConstraints({ advanced: [{ zoom: slider.value }] });
+          } else {
+            document.getElementById("zoomControl").style.display = "none";
           }
         }
       }).catch(err => console.error("Camera start failed", err));
@@ -114,6 +131,16 @@
       if (cameras.length > 1) {
         currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
         startCamera(cameras[currentCameraIndex].id);
+      }
+    });
+
+    // Zoom slider
+    document.getElementById("zoomSlider").addEventListener("input", (event) => {
+      if (videoTrack && zoomCapabilities && zoomCapabilities.zoom) {
+        let zoomValue = event.target.value;
+        videoTrack.applyConstraints({ advanced: [{ zoom: zoomValue }] })
+          .then(() => console.log("Zoom set to", zoomValue))
+          .catch(err => console.warn("Zoom not applied", err));
       }
     });
   </script>
