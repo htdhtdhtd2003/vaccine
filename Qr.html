@@ -1,37 +1,72 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR Generator</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<title>Data Matrix Barcode Reader</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
 <style>
-body { font-family: Arial; text-align: center; padding: 20px; }
-canvas { margin-top: 15px; width:200px; height:200px; border:1px solid #ccc; }
+body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+#reader { width: 100%; max-width: 400px; margin: auto; }
+#result { margin-top: 20px; font-weight: bold; color: green; word-wrap: break-word; }
+button { margin-top: 10px; padding: 10px 16px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; background: #007bff; color: white; }
+button:hover { background: #0056b3; }
 </style>
 </head>
 <body>
 
-<h2>QR Code Generator</h2>
-<canvas id="recreatedQR"></canvas>
+<h2>Data Matrix Barcode Reader</h2>
+<div id="reader"></div>
+<div id="result">Scanning...</div>
+<button id="stopBtn">Stop Scanner</button>
 
 <script>
-// Get URL parameter
-function getQueryParam(name) {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get(name);
-}
+const resultDiv = document.getElementById("result");
+const stopBtn = document.getElementById("stopBtn");
 
-const scannedText = getQueryParam('data');
-if(scannedText) {
-  QRCode.toCanvas(document.getElementById('recreatedQR'), scannedText, { width: 200 }, err=>{
-    if(err) console.error(err);
-  });
-} else {
-  document.getElementById('recreatedQR').innerText = "No data received";
-}
+let html5QrCode;
+
+// Start scanner
+Html5Qrcode.getCameras().then(cameras => {
+  if (cameras && cameras.length) {
+    let rearCam = cameras.find(cam => /back|environment/i.test(cam.label)) || cameras[0];
+    html5QrCode = new Html5Qrcode("reader");
+
+    html5QrCode.start(
+      { deviceId: { exact: rearCam.id } },
+      {
+        fps: 10,
+        qrbox: 250,
+        formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ] // only Data Matrix
+      },
+      decodedText => {
+        resultDiv.innerText = "Decoded: " + decodedText;
+      },
+      errorMessage => {
+        // silently ignore scan errors
+      }
+    ).catch(err => {
+      resultDiv.innerText = "Error starting camera: " + err;
+    });
+  } else {
+    resultDiv.innerText = "No cameras found";
+  }
+}).catch(err => {
+  resultDiv.innerText = "Camera access error: " + err;
+});
+
+// Stop button
+stopBtn.addEventListener("click", () => {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      resultDiv.innerText = "Scanner stopped";
+    }).catch(err => {
+      resultDiv.innerText = "Error stopping: " + err;
+    });
+  }
+});
 </script>
 
 </body>
 </html>
+
