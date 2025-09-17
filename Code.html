@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Live 2D Barcode Scanner</title>
+<title>Rear Camera 2D Barcode Scanner</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
@@ -17,7 +17,7 @@ button:hover { background:#0056b3; }
 </head>
 <body>
 
-<h2>Live 2D Barcode Scanner</h2>
+<h2>Rear Camera 2D Barcode Scanner</h2>
 <div id="reader"></div>
 <div id="result">Scanning...</div>
 <canvas id="recreatedQR"></canvas>
@@ -29,7 +29,7 @@ const resultDiv = document.getElementById("result");
 const recreatedCanvas = document.getElementById("recreatedQR");
 const stopBtn = document.getElementById("stopBtn");
 
-// Configuration: enable all supported 2D barcodes
+// Configuration: support multiple 2D barcode formats
 const config = {
     fps: 10,
     qrbox: 250,
@@ -42,16 +42,16 @@ const config = {
     ]
 };
 
-// Start scanner using rear camera
+// Get rear camera only
 Html5Qrcode.getCameras().then(cameras => {
     if(cameras && cameras.length){
-        const cameraId = cameras[0].id;
+        // Try to select a rear camera (look for 'back' or 'environment')
+        let rearCamera = cameras.find(cam => /back|environment/i.test(cam.label)) || cameras[0];
         html5QrCode.start(
-            { deviceId: { exact: cameraId } },
+            { deviceId: { exact: rearCamera.id } },
             config,
             (decodedText, decodedResult) => {
                 resultDiv.innerText = "Scanned: " + decodedText;
-                // Recreate as QR code
                 QRCode.toCanvas(recreatedCanvas, decodedText, { width: 200 }, err => {
                     if(err) console.error(err);
                 });
