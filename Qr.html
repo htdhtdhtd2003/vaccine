@@ -3,93 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Take Picture → Read Barcode → Recreate</title>
+<title>Live QR Scanner with Zoom</title>
 <script src="https://unpkg.com/html5-qrcode"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bwip-js/4.7.0/bwip-js-min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
-  body { font-family: Arial; text-align: center; padding: 20px; }
-  video, img, canvas { width: 100%; max-width: 400px; border-radius: 8px; margin-top: 10px; }
-  button { margin-top: 10px; padding: 10px 16px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; background: #007bff; color: white; }
-  button:hover { background: #0056b3; }
-  #result { margin-top: 15px; font-weight: bold; color: green; }
+body { font-family: Arial; text-align: center; padding: 20px; }
+#reader { width: 100%; max-width: 400px; margin: auto; border-radius:8px; }
+#controls { margin-top: 10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+button { padding: 10px 14px; border:none; border-radius:6px; font-size:16px; cursor:pointer; background:#007bff; color:white; }
+button:hover { background:#0056b3; }
+input[type=range] { width:80%; max-width:300px; }
+#result { margin-top: 15px; font-weight:bold; color: green; }
+canvas { margin-top: 15px; width:200px; height:200px; }
 </style>
 </head>
 <body>
 
-<h2>Take Picture → Read Barcode → Recreate</h2>
+<h2>Live QR Scanner with Zoom</h2>
+<div id="reader"></div>
 
-<video id="video" autoplay playsinline></video>
-<button id="captureBtn">📸 Take Picture</button>
-<img id="photo" style="display:none;" />
-<div id="result">No barcode detected yet.</div>
-<canvas id="recreatedBarcode"></canvas>
+<div id="controls">
+  <button id="torchBtn" style="display:none;">Toggle Torch</button>
+  <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1" style="display:none;">
+</div>
+
+<div id="result">Scanning...</div>
+<canvas id="recreatedQR"></canvas>
 
 <script>
-const video = document.getElementById('video');
-const photo = document.getElementById('photo');
-const resultDiv = document.getElementById('result');
-const recreatedCanvas = document.getElementById('recreatedBarcode');
-let stream = null;
+let html5QrCode;
+let videoTrack = null;
+let torchOn = false;
 
-// Start rear camera
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: "environment" } }
-    });
-    video.srcObject = stream;
-  } catch(err) {
-    console.error(err);
-    resultDiv.innerText = "Camera error: " + err.message;
-  }
+// QR decode callback
+function onScanSuccess(decodedText, decodedResult) {
+  document.getElementById("result").innerText = "Scanned: " + decodedText;
+  QRCode.toCanvas(document.getElementById("recreatedQR"), decodedText, { width: 200 }, err=>{
+    if(err) console.error(err);
+  });
 }
-startCamera();
 
-// Take picture
-document.getElementById('captureBtn').addEventListener('click', async () => {
-  if (!stream) { resultDiv.innerText = "No camera available"; return; }
+function onScanError(errorMessage) {
+  // optional logging
+}
 
-  const track = stream.getVideoTracks()[0];
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-  const dataUrl = canvas.toDataURL('image/png');
-  photo.src = dataUrl;
-  photo.style.display = "block";
-
-  // Convert to File for html5-qrcode
-  const blob = await (await fetch(dataUrl)).blob();
-  const file = new File([blob], "capture.png", { type: "image/png" });
-
-  const html5QrCode = new Html5Qrcode("temp"); // temporary instance for file scan
+async function startLiveScanner() {
   try {
-    const result = await html5QrCode.scanFileV2(file, true);
-    const decodedText = result.decodedText;
-    resultDiv.innerText = "Detected: " + decodedText;
+    const devices = await Html5Qrcode.getCameras();
+    if (!devices || devices.length === 0) {
+      document.getElementById("result").innerText = "No camera found";
+      return;
+    }
 
-    // Recreate barcode using bwip-js
-    try {
-      // auto-select type: QR for QR codes, code128 for text
-      const type = result.result.format === "QR_CODE" ? "qrcode" : "code128";
-      BWIPJS.toCanvas(recreatedCanvas, {
-        bcid: type,       // Barcode type
-        text: decodedText, // Data to encode
-        scale: 3,
-        height: 10,
-        includetext: true,
-        textxalign: 'center'
+    const backCamera = devices.find(d => d.label.toLowerCase().includes("back")) || devices[0];
+
+    html5QrCode = new Html5Qrcode("reader");
+    await html5QrCode.start(
+      { deviceId: { exact: backCamera.id } },
+      { fps: 10, qrbox: 250 },
+      onScanSuccess,
+      onScanError
+    );
+
+    videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
+    if (!videoTrack) return;
+    const capabilities = videoTrack.getCapabilities();
+
+    // Continuous autofocus
+    if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+      await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+    }
+
+    // Torch support
+    const torchBtn = document.getElementById("torchBtn");
+    if (capabilities.torch) {
+      torchBtn.style.display = "inline-block";
+      torchBtn.addEventListener("click", () => {
+        torchOn = !torchOn;
+        videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => console.warn("Torch not supported", err));
       });
-    } catch(err) {
-      console.error(err);
-      resultDiv.innerText += " | Failed to recreate barcode";
+    }
+
+    // Zoom support
+    const zoomSlider = document.getElementById("zoomSlider");
+    if (capabilities.zoom) {
+      zoomSlider.min = capabilities.min;
+      zoomSlider.max = capabilities.max;
+      zoomSlider.step = capabilities.step || 0.1;
+      zoomSlider.value = (capabilities.min + capabilities.max)/2;
+      zoomSlider.style.display = "inline-block";
+
+      // Apply initial zoom
+      await videoTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+
+      zoomSlider.addEventListener("input", async (e) => {
+        const val = e.target.value;
+        try {
+          await videoTrack.applyConstraints({ advanced: [{ zoom: val }] });
+        } catch(err) {
+          console.warn("Zoom adjustment failed", err);
+        }
+      });
     }
 
   } catch(err) {
     console.error(err);
-    resultDiv.innerText = "No barcode detected in the image";
+    document.getElementById("result").innerText = "Camera access error: " + err;
   }
-});
+}
+
+startLiveScanner();
 </script>
 
 </body>
