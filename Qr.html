@@ -2,140 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Scanner (Rear Camera Only)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Capture → Read QR → Recreate QR</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-    }
-    #reader {
-      width: 100%;
-      max-width: 400px;
-      margin: auto;
-    }
-    #result {
-      margin-top: 20px;
-      font-size: 18px;
-      font-weight: bold;
-      color: green;
-    }
-    #qrcode {
-      margin-top: 20px;
-    }
-    button {
-      margin-top: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
-      background: #007bff;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    #zoomControl {
-      margin-top: 15px;
-      display: none;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    video, img { width: 100%; max-width: 400px; border-radius: 8px; margin-top: 10px; }
+    button { margin-top: 10px; padding: 10px 16px; border: none; border-radius: 6px;
+             background: #007bff; color: white; font-size: 16px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    #result { margin-top: 20px; font-size: 18px; font-weight: bold; color: green; }
+    #qrcode { margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>QR Code Scanner (Rear Camera)</h1>
-  
-  <div id="reader"></div>
-  <button id="torchBtn" style="display:none;">Toggle Torch</button>
+  <h2>Take Picture → Read QR → Recreate QR</h2>
 
-  <div id="zoomControl">
-    <label for="zoomSlider">Zoom:</label>
-    <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1">
-  </div>
+  <video id="video" autoplay playsinline></video><br>
+  <button id="captureBtn">📸 Take Picture</button>
+  <img id="photo" style="display:none;" />
 
-  <div id="result">Scanning...</div>
+  <div id="result">No QR detected yet.</div>
   <div id="qrcode"></div>
 
   <script>
-    let html5QrCode;
-    let videoTrack = null;
-    let zoomCapabilities = null;
-    let torchOn = false;
+    const video = document.getElementById('video');
+    const photo = document.getElementById('photo');
+    const resultDiv = document.getElementById('result');
+    const qrcodeDiv = document.getElementById('qrcode');
 
-    function onScanSuccess(decodedText, decodedResult) {
-      document.getElementById("result").innerText = "Scanned: " + decodedText;
-
-      // Generate QR from scanned text
-      document.getElementById("qrcode").innerHTML = "";
-      QRCode.toCanvas(document.getElementById("qrcode"), decodedText, { width: 200 }, function (error) {
-        if (error) console.error(error);
-      });
+    // Start rear camera
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        console.error("Camera error:", err);
+        resultDiv.textContent = "Error: Cannot access rear camera.";
+      }
     }
+    startCamera();
 
-    async function startCamera(cameraId) {
-      if (html5QrCode) {
-        await html5QrCode.stop();
-      }
-      html5QrCode = new Html5Qrcode("reader");
+    document.getElementById('captureBtn').addEventListener('click', async () => {
+      // Capture current video frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL("image/png");
+      photo.src = dataUrl;
+      photo.style.display = "block";
 
-      html5QrCode.start(
-        { deviceId: { exact: cameraId } },
-        { fps: 15, qrbox: 300, aspectRatio: 1.7778 },
-        onScanSuccess
-      ).then(() => {
-        videoTrack = document.querySelector("video")?.srcObject?.getVideoTracks()[0];
-        if (videoTrack) {
-          let capabilities = videoTrack.getCapabilities();
+      // Convert dataURL to File for html5-qrcode
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], "capture.png", { type: "image/png" });
 
-          // Setup Zoom
-          if (capabilities.zoom) {
-            let slider = document.getElementById("zoomSlider");
-            slider.min = capabilities.min;
-            slider.max = capabilities.max;
-            slider.step = capabilities.step || 0.1;
-            slider.value = (capabilities.min + capabilities.max) / 2;
+      const html5QrCode = new Html5Qrcode(/* elementId not needed for file scan */ "reader-temp");
+      try {
+        const qrCodeResult = await html5QrCode.scanFileV2(file, true);
+        resultDiv.textContent = "Scanned: " + qrCodeResult.decodedText;
 
-            document.getElementById("zoomControl").style.display = "block";
-            videoTrack.applyConstraints({ advanced: [{ zoom: slider.value }] });
-            zoomCapabilities = capabilities;
-          }
-
-          // Setup Torch
-          if (capabilities.torch) {
-            document.getElementById("torchBtn").style.display = "inline-block";
-          }
-        }
-      }).catch(err => console.error("Camera start failed", err));
-    }
-
-    // Pick rear camera only
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
-        // Look for rear/back-facing camera
-        let backCamera = devices.find(device => device.label.toLowerCase().includes("back")) || devices[0];
-        startCamera(backCamera.id);
-      }
-    }).catch(err => console.error("Camera access error", err));
-
-    // Torch toggle
-    document.getElementById("torchBtn").addEventListener("click", () => {
-      if (videoTrack) {
-        torchOn = !torchOn;
-        videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
-          .catch(err => console.warn("Torch not supported:", err));
-      }
-    });
-
-    // Zoom slider
-    document.getElementById("zoomSlider").addEventListener("input", (event) => {
-      if (videoTrack && zoomCapabilities && zoomCapabilities.zoom) {
-        let zoomValue = event.target.value;
-        videoTrack.applyConstraints({ advanced: [{ zoom: zoomValue }] })
-          .then(() => console.log("Zoom set to", zoomValue))
-          .catch(err => console.warn("Zoom not applied", err));
+        // Recreate QR
+        qrcodeDiv.innerHTML = "";
+        QRCode.toCanvas(qrcodeDiv, qrCodeResult.decodedText, { width: 200 }, err => {
+          if (err) console.error(err);
+        });
+      } catch (err) {
+        console.error("QR decode error:", err);
+        resultDiv.textContent = "No QR code found in image.";
       }
     });
   </script>
