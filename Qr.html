@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Reader (Switchable Cameras)</title>
+  <title>QR Code Reader (Auto Zoom)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
@@ -41,14 +41,11 @@
   </style>
 </head>
 <body>
-  <h1>QR Code Scanner</h1>
+  <h1>QR Code Scanner (Auto Zoom)</h1>
   
-  <!-- QR Scanner -->
   <div id="reader"></div>
   <button id="switchBtn">Switch Camera</button>
   <div id="result">Scanning...</div>
-  
-  <!-- QR Generator -->
   <div id="qrcode"></div>
 
   <script>
@@ -66,23 +63,33 @@
       });
     }
 
-    function startCamera(cameraId) {
+    async function startCamera(cameraId) {
       if (html5QrCode) {
-        html5QrCode.stop().then(() => {
-          html5QrCode.start(
-            { deviceId: { exact: cameraId } },
-            { fps: 10, qrbox: 250 },
-            onScanSuccess
-          ).catch(err => console.error("Camera start failed", err));
-        });
-      } else {
-        html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start(
-          { deviceId: { exact: cameraId } },
-          { fps: 10, qrbox: 250 },
-          onScanSuccess
-        ).catch(err => console.error("Camera start failed", err));
+        await html5QrCode.stop();
       }
+      html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { deviceId: { exact: cameraId } },
+        { fps: 10, qrbox: 250 },
+        onScanSuccess
+      ).then(() => {
+        // Access the raw video track
+        let videoTrack = html5QrCode.getState() === Html5QrcodeScannerState.SCANNING 
+          ? document.querySelector("video")?.srcObject?.getVideoTracks()[0] 
+          : null;
+
+        if (videoTrack) {
+          let capabilities = videoTrack.getCapabilities();
+          if (capabilities.zoom) {
+            // Pick a zoom level (e.g. halfway between min & max)
+            let targetZoom = (capabilities.max + capabilities.min) / 2;
+            videoTrack.applyConstraints({ advanced: [{ zoom: targetZoom }] })
+              .then(() => console.log("Zoom set to", targetZoom))
+              .catch(err => console.warn("Zoom not applied", err));
+          }
+        }
+      }).catch(err => console.error("Camera start failed", err));
     }
 
     // Initialize cameras
@@ -90,12 +97,12 @@
       if (devices && devices.length) {
         cameras = devices;
 
-        // Try to start with front camera first
+        // Prefer front camera
         let frontCamera = devices.find(device => device.label.toLowerCase().includes("front"));
         if (frontCamera) {
           currentCameraIndex = devices.indexOf(frontCamera);
         } else {
-          currentCameraIndex = 0; // fallback to first
+          currentCameraIndex = 0; // fallback
         }
 
         startCamera(cameras[currentCameraIndex].id);
