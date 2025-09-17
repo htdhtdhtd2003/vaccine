@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live 2D Barcode Scanner</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<style>
+body { font-family: Arial; text-align: center; padding: 20px; }
+#reader { width: 100%; max-width: 400px; margin: auto; border:1px solid #ccc; border-radius:8px; }
+#result { margin-top:15px; font-weight:bold; color:green; }
+canvas { margin-top:15px; width:200px; height:200px; border:1px solid #ccc; }
+button { margin-top:10px; padding:10px 14px; font-size:16px; border:none; border-radius:6px; cursor:pointer; background:#007bff; color:white; }
+button:hover { background:#0056b3; }
+</style>
+</head>
+<body>
+
+<h2>Live 2D Barcode Scanner</h2>
+<div id="reader"></div>
+<div id="result">Scanning...</div>
+<canvas id="recreatedQR"></canvas>
+<button id="stopBtn">Stop Scanner</button>
+
+<script>
+const html5QrCode = new Html5Qrcode("reader");
+const resultDiv = document.getElementById("result");
+const recreatedCanvas = document.getElementById("recreatedQR");
+const stopBtn = document.getElementById("stopBtn");
+
+// Configuration: enable all supported 2D barcodes
+const config = {
+    fps: 10,
+    qrbox: 250,
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.PDF_417,
+        Html5QrcodeSupportedFormats.AZTEC
+    ]
+};
+
+// Start scanner using rear camera
+Html5Qrcode.getCameras().then(cameras => {
+    if(cameras && cameras.length){
+        const cameraId = cameras[0].id;
+        html5QrCode.start(
+            { deviceId: { exact: cameraId } },
+            config,
+            (decodedText, decodedResult) => {
+                resultDiv.innerText = "Scanned: " + decodedText;
+                // Recreate as QR code
+                QRCode.toCanvas(recreatedCanvas, decodedText, { width: 200 }, err => {
+                    if(err) console.error(err);
+                });
+            },
+            (errorMessage) => {
+                // Ignore scan errors
+            }
+        );
+    }
+}).catch(err => {
+    console.error(err);
+    resultDiv.innerText = "Camera not found or access denied";
+});
+
+// Stop scanner button
+stopBtn.addEventListener("click", () => {
+    html5QrCode.stop().then(() => {
+        resultDiv.innerText = "Scanner stopped";
+    }).catch(err => console.error(err));
+});
+</script>
+
+</body>
+</html>
