@@ -1,30 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Data Matrix Scanner</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
-<style>
-body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-#reader { width: 100%; max-width: 400px; margin: 20px auto; }
-#result { margin-top: 20px; font-weight: bold; color: green; word-wrap: break-word; }
-</style>
+  <meta charset="utf-8">
+  <title>Multi 2D Barcode Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <style>
+    body { font-family: Arial; text-align:center; padding:20px; }
+    #reader { width: 100%; max-width: 400px; margin:auto; }
+    #result { margin-top:20px; font-weight:bold; color:green; word-wrap: break-word; }
+  </style>
 </head>
 <body>
 
-<h2>Data Matrix Scanner</h2>
+<h2>Multi 2D Barcode Scanner</h2>
 <div id="reader"></div>
-<div id="result">Waiting for scan...</div>
+<p id="result">Waiting for scan...</p>
 
 <script>
 const resultDiv = document.getElementById("result");
 const html5QrCode = new Html5Qrcode("reader");
 
-// force rear camera without listing devices
+// Start scanner with multi-format support
 html5QrCode.start(
-  { facingMode: "environment" },   // same trick as your test page
-  { fps: 10, qrbox: 250, formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ] },
+  { facingMode: "environment" },  // rear camera
+  {
+    fps: 10,
+    qrbox: 250,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.AZTEC,
+      Html5QrcodeSupportedFormats.PDF_417
+    ]
+  },
   decodedText => {
     resultDiv.innerText = "✅ Decoded: " + decodedText;
   },
