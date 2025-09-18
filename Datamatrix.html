@@ -1,101 +1,75 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Data Matrix Live Scanner + Box</title>
-  <style>
-    body { font-family: sans-serif; margin: 0; padding: 1em; }
-    .cam-container {
-      position: relative;
-      width: 100%;
-      max-width: 640px;
-    }
-    video, canvas {
-      width: 100%;
-      max-width: 640px;
-      border-radius: 8px;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none; /* let clicks pass through */
-    }
-    #result { margin-top: 1em; white-space: pre-wrap; font-weight: bold; }
-    button { margin-top: 1em; padding: .6em 1em; border-radius: 6px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debug Camera + Data Matrix Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.9/minified/html5-qrcode.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+#reader { width: 100%; max-width: 400px; margin: 20px auto; }
+#cameraSelect { margin: 10px; padding: 8px; }
+#result { margin-top: 20px; font-weight: bold; color: green; word-wrap: break-word; }
+</style>
 </head>
 <body>
-  <h1>Data Matrix Live Scanner</h1>
-  <div class="cam-container">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="overlay"></canvas>
-  </div>
-  <div id="result">Result: none</div>
-  <button id="stopBtn" disabled>Stop</button>
 
-  <script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
-  <script>
-    const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-    const video = document.getElementById('video');
-    const overlay = document.getElementById('overlay');
-    const ctx = overlay.getContext('2d');
-    const resultDiv = document.getElementById('result');
-    const stopBtn = document.getElementById('stopBtn');
+<h2>Debug Camera + Data Matrix Scanner</h2>
 
-    async function start() {
-      try {
-        const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-        const rearCam = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[0];
-        if (!rearCam) {
-          resultDiv.textContent = 'No camera found';
-          return;
-        }
-        stopBtn.disabled = false;
-        resultDiv.textContent = 'Scanning...';
+<select id="cameraSelect">
+  <option>Loading cameras...</option>
+</select>
+<button id="startBtn">Start Scanner</button>
+<div id="reader"></div>
+<div id="result">Waiting for scan...</div>
 
-        await codeReader.decodeFromVideoDevice(
-          rearCam.deviceId,
-          'video',
-          (result, err, controls) => {
-            // resize overlay canvas to match video
-            overlay.width = video.videoWidth;
-            overlay.height = video.videoHeight;
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
+<script>
+const resultDiv = document.getElementById("result");
+const selectEl = document.getElementById("cameraSelect");
+const startBtn = document.getElementById("startBtn");
 
-            if (result) {
-              resultDiv.textContent = 'Result: ' + result.getText();
-              // draw polygon if available
-              if (result.resultPoints && result.resultPoints.length) {
-                ctx.strokeStyle = 'lime';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                const pts = result.resultPoints;
-                ctx.moveTo(pts[0].x, pts[0].y);
-                pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-                ctx.closePath();
-                ctx.stroke();
-              }
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-              console.error(err);
-            }
-          }
-        );
-      } catch (e) {
-        resultDiv.textContent = 'Error starting camera: ' + e;
-      }
+const html5QrCode = new Html5Qrcode("reader");
+
+// 1. List available cameras
+Html5Qrcode.getCameras().then(devices => {
+    selectEl.innerHTML = "";
+    if (devices && devices.length) {
+        devices.forEach(d => {
+            const opt = document.createElement("option");
+            opt.value = d.id;
+            opt.text = d.label || `Camera ${selectEl.length+1}`;
+            selectEl.appendChild(opt);
+        });
+    } else {
+        selectEl.innerHTML = "<option>No cameras found</option>";
     }
+}).catch(err => {
+    selectEl.innerHTML = "<option>Error: " + err + "</option>";
+});
 
-    stopBtn.addEventListener('click', () => {
-      codeReader.reset();
-      stopBtn.disabled = true;
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
-      resultDiv.textContent = 'Stopped.';
+// 2. Start scanning when button clicked
+startBtn.addEventListener("click", () => {
+    const cameraId = selectEl.value;
+    resultDiv.innerText = "Starting scanner...";
+
+    html5QrCode.start(
+        { deviceId: { exact: cameraId } },
+        {
+            fps: 10,
+            qrbox: 250,
+            formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ]
+        },
+        decodedText => {
+            resultDiv.innerText = "Decoded: " + decodedText;
+        },
+        errorMessage => {
+            // Ignore decoding errors
+        }
+    ).catch(err => {
+        resultDiv.innerText = "Error starting scanner: " + err;
     });
+});
+</script>
 
-    start();
-  </script>
 </body>
 </html>
