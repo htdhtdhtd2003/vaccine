@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Test</title>
+<style>
+video { width: 100%; max-width: 400px; border: 2px solid black; }
+</style>
+</head>
+<body>
+<h2>Camera Test</h2>
+<video id="video" autoplay playsinline></video>
+<div id="status">Starting...</div>
+
+<script>
+const video = document.getElementById("video");
+const status = document.getElementById("status");
+
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+.then(stream => {
+  video.srcObject = stream;
+  status.textContent = "✅ Camera started (rear)";
+})
+.catch(err => {
+  status.textContent = "❌ Error: " + err;
+});
+</script>
+</body>
+</html>
