@@ -16,9 +16,7 @@ body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
 
 <h2>Debug Camera + Data Matrix Scanner</h2>
 
-<select id="cameraSelect">
-  <option>Loading cameras...</option>
-</select>
+<select id="cameraSelect"><option>Requesting camera...</option></select>
 <button id="startBtn">Start Scanner</button>
 <div id="reader"></div>
 <div id="result">Waiting for scan...</div>
@@ -30,44 +28,47 @@ const startBtn = document.getElementById("startBtn");
 
 const html5QrCode = new Html5Qrcode("reader");
 
-// 1. List available cameras
-Html5Qrcode.getCameras().then(devices => {
-    selectEl.innerHTML = "";
-    if (devices && devices.length) {
-        devices.forEach(d => {
-            const opt = document.createElement("option");
-            opt.value = d.id;
-            opt.text = d.label || `Camera ${selectEl.length+1}`;
-            selectEl.appendChild(opt);
-        });
-    } else {
-        selectEl.innerHTML = "<option>No cameras found</option>";
-    }
-}).catch(err => {
-    selectEl.innerHTML = "<option>Error: " + err + "</option>";
+// Step 1: Force userMedia to unlock camera access
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => {
+  stream.getTracks().forEach(track => track.stop()); // close preview
+  // Now enumerate devices
+  return Html5Qrcode.getCameras();
+})
+.then(devices => {
+  selectEl.innerHTML = "";
+  if (devices && devices.length) {
+    devices.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.text = d.label || `Camera ${selectEl.length+1}`;
+      selectEl.appendChild(opt);
+    });
+  } else {
+    selectEl.innerHTML = "<option>No cameras found</option>";
+  }
+})
+.catch(err => {
+  selectEl.innerHTML = "<option>Error: " + err + "</option>";
 });
 
-// 2. Start scanning when button clicked
+// Step 2: Start scanning when user clicks
 startBtn.addEventListener("click", () => {
-    const cameraId = selectEl.value;
-    resultDiv.innerText = "Starting scanner...";
+  const cameraId = selectEl.value;
+  resultDiv.innerText = "Starting scanner...";
 
-    html5QrCode.start(
-        { deviceId: { exact: cameraId } },
-        {
-            fps: 10,
-            qrbox: 250,
-            formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ]
-        },
-        decodedText => {
-            resultDiv.innerText = "Decoded: " + decodedText;
-        },
-        errorMessage => {
-            // Ignore decoding errors
-        }
-    ).catch(err => {
-        resultDiv.innerText = "Error starting scanner: " + err;
-    });
+  html5QrCode.start(
+    { deviceId: { exact: cameraId } },
+    { fps: 10, qrbox: 250, formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ] },
+    decodedText => {
+      resultDiv.innerText = "Decoded: " + decodedText;
+    },
+    errorMessage => {
+      // Ignore decoding errors
+    }
+  ).catch(err => {
+    resultDiv.innerText = "Error starting scanner: " + err;
+  });
 });
 </script>
 
